@@ -1,0 +1,46 @@
+---
+title: "Leaflet demo with R - Course 9"
+author: "S N Sil"
+date: "Oct 02, 2017"
+output:
+  html_document:
+    highlight: haddock
+    theme: united
+keep_md: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Introduction
+The web page shows an interactive map with world population distribution per country.
+
+
+##Downloading files.
+```{r, eval=FALSE, include=FALSE}
+download.file("http://thematicmapping.org/downloads/TM_WORLD_BORDERS_SIMPL-0.3.zip", "TM_WORLD_BORDERS_SIMPL-0.3.zip")
+system("unzip TM_WORLD_BORDERS_SIMPL-0.3.zip")
+```
+##Loading libraries and processing data from downloaded file
+```{r}
+library(leaflet)
+library(classInt)
+library(rgdal)
+
+w<-readOGR(dsn=getwd(), layer="TM_WORLD_BORDERS_SIMPL-0.3")
+w$AREA<-as.numeric(w$AREA)
+w$AREA[which(w$AREA == 0)]<- 1.0 #to avoid division by zero
+w$POP2005<-as.numeric(w$POP2005) # string to numeric
+pd<-w$POP2005/w$AREA
+
+#Creating color buckets based on population density
+p <- colorBin("YlOrRd", domain = pd, bins = classIntervals(pd, 7)$brks)
+
+#Creating choropleth Leaflet map and adding legend
+themap=addTiles(leaflet(w)) %>% setView(lat=15, lng=0, zoom=2) %>%
+  addPolygons(stroke = FALSE, fillOpacity = 0.5, smoothFactor = 1.0, fillColor = ~p(pd)) %>%
+  addLegend(pal = p, values = ~pd, opacity = 0.5, title = date(),
+  position = "bottomright")
+themap
+```
