@@ -1,0 +1,111 @@
+---
+title: "Prediction with given dataset in R - Course 8"
+author: "S N Sil"
+date: "Oct 01, 2017"
+output:
+  html_document:
+    highlight: haddock
+    theme: united
+keep_md: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Introduction
+Six participants activities are tracked ny data collection from devices like Jawbone Up, Nike FuelBand, and Fitbit. Predictable variable is created by asking the performers to perform some activities. 
+
+
+##Processing
+Training and test datasets are downloaded for analysis. The data is not complete i.e. there are empty values. The empty values along with metadata columns in the first columns are not considered. Since there are huge number of columns (100), PCA is used to reduce the number of principal components to 38.
+
+```{r, echo=FALSE}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv","pml-training.csv")
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv","pml-testing.csv")
+```
+
+```{r}
+set.seed(999)
+library(randomForest)
+library(e1071)
+library(caret)
+#read files
+training<-read.csv("pml-training.csv",na.strings = c("NA"," ","#DIV/0!"))
+test<-read.csv("pml-testing.csv")
+#get training set rows
+trrows=dim(training)[1]
+#get empty value measures
+NA_pct_cols<-sapply(1:ncol(training),function (i) {sum(is.na(training[,i]))/trrows})
+NA_pct_cols<-data.frame(NA_percent=NA_pct_cols,colpos=1:160)
+
+#get 95 pct+ columns and removing them...
+NA_pct_cols<-subset(NA_pct_cols,NA_percent>0.95)
+training<-training[,-NA_pct_cols$colpos]
+training<-training[complete.cases(training),]
+test<-test[,-NA_pct_cols$colpos]
+
+#Removing 1st 5 metadata columns
+training<-training[,-(1:5)]
+test<-test[,-(1:5)]
+
+#seperating 'the target'classe' variable
+train_target<-training$classe
+training<-training[,-55]
+
+training$new_window<-as.numeric(factor(training$new_window))
+test$new_window<-as.numeric(factor(test$new_window))
+
+#Applying PCA with the cleaned data
+c1<-prcomp(training,scale = T)
+c2<-(c1$sdev)^2
+c3<-cumsum(c2/sum(c2))
+
+plot(c3,xlab="Principal Components",ylab="Cum. Proportion of Variance Explained",
+              type="b",main="Cum Var. explained Vs Principal Component")
+
+#38 principal components are selected as predictor in the training and test data
+training<-data.frame(c1$x[,1:38],classe=train_target)
+
+test<-predict(c1,newdata=test)
+#selecting 38 components
+test<-test[,1:38]
+
+#Cross validation with 80/20 division of training dataset into training and test dataset
+training_sub_ind<-createDataPartition(training$classe, p=0.80, list=FALSE)
+training_sub<-training[training_sub_ind,]
+test_sub<-training[-training_sub_ind,]
+```
+
+##Model training
+```{r}
+#generating machine model
+model1<-svm(classe~.,data=training_sub,scale=T)
+#Details of machine model:
+model1
+
+# generating random forest model
+model2<-randomForest(classe ~ ., data=training_sub)
+#Details of random forest model
+model2
+
+#Predict classes in test subset using svm
+predict_classe1<-predict(model1,test_sub[,-39])
+
+#Predict classes in test subset using Random forest model
+predict_classe2<-predict(model2,test_sub[,-39])
+
+# Generating confusion matrix...
+confusionMatrix(predict_classe1, test_sub$classe) #Check accuracy
+confusionMatrix(predict_classe2, test_sub$classe) #Check accuracy
+```
+
+Accuracy of random forest is better (98%+)
+
+##Conslusion
+```{r}
+#Predicting classes and output to csv file...
+final<-predict(model2,test)
+final
+write.csv(final,"final.csv")
+```
